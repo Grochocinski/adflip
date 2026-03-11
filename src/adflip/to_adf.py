@@ -256,6 +256,19 @@ def _parse_layout_directive(body: str) -> dict[str, Any]:
     return {"type": "layoutSection", "content": columns}
 
 
+def _unescape_table_pipes(nodes: list[dict[str, Any]]) -> None:
+    """Remove backslash-escaped pipes in table cell text.
+
+    Markdown tables require \\| to prevent | from being parsed as a cell
+    delimiter. ADF tables are structural, so the escapes must be stripped.
+    """
+    for node in nodes:
+        if "text" in node and "\\|" in node["text"]:
+            node["text"] = node["text"].replace("\\|", "|")
+        if "content" in node and isinstance(node["content"], list):
+            _unescape_table_pipes(node["content"])
+
+
 # -- Markdown to ADF using mistune --
 
 def _markdown_to_adf_nodes(text: str) -> list[dict[str, Any]]:
@@ -515,6 +528,7 @@ class _AdfRenderer(mistune.BaseRenderer):
             if cell.get("type") != "table_cell":
                 continue
             inline = self._render_children_inline(cell.get("children"), state)
+            _unescape_table_pipes(inline)
             para = {"type": "paragraph", "content": inline} if inline else {"type": "paragraph"}
             result.append({"type": cell_type, "content": [para]})
         return result
