@@ -171,9 +171,9 @@ def _convert_media_node(node: dict[str, Any], indent: str = "") -> str:
         url = attrs.get("url", "")
         return f"{indent}![{alt}]({url})"
 
-    # Confluence-hosted media: preserve as directive
+    # Confluence-hosted media: preserve as self-closing directive
     attrs_json = json.dumps(attrs, separators=(",", ":"))
-    return f"{indent}<!-- confluence:media {attrs_json} -->"
+    return f"{indent}<!-- confluence:media {attrs_json} /-->"
 
 
 # -- Confluence-specific block nodes: wrap in HTML comment directives --
@@ -235,11 +235,11 @@ def _convert_extension(node: dict[str, Any], indent: str = "") -> str:
 
 def _convert_unknown_block(node: dict[str, Any], indent: str = "") -> str:
     """Fallback: preserve unknown block nodes as opaque ADF JSON."""
-    node_json = json.dumps(node, indent=2)
+    node_json = json.dumps(node, separators=(",", ":"))
     return (
-        f"{indent}<!-- confluence:adf\n"
+        f"{indent}<!-- confluence:adf -->\n"
         f"{node_json}\n"
-        f"{indent}/-->"
+        f"{indent}<!-- /confluence:adf -->"
     )
 
 
@@ -325,7 +325,7 @@ def _convert_text_with_marks(node: dict[str, Any]) -> str:
             text = f"<u>{text}</u>"
         elif mark_type == "textColor":
             color = attrs.get("color", "")
-            text = f'<!-- confluence:color {color} -->{text}<!-- /confluence:color -->'
+            text = f'<!-- confluence:color color="{color}" -->{text}<!-- /confluence:color -->'
         else:
             # Unknown mark: preserve as directive
             mark_json = json.dumps(mark, separators=(",", ":"))

@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 import mistune
+from mistune.plugins.table import table as mistune_table_plugin
 
 # Regex patterns for directive parsing
 _DIRECTIVE_OPEN = re.compile(
@@ -262,7 +263,7 @@ def _markdown_to_adf_nodes(text: str) -> list[dict[str, Any]]:
     # Pre-process inline directives to protect them from mistune
     text, inline_map = _protect_inline_directives(text)
 
-    md = mistune.create_markdown(renderer=_AdfRenderer())
+    md = mistune.create_markdown(renderer=_AdfRenderer(), plugins=[mistune_table_plugin])
     result = md(text)
 
     if not isinstance(result, list):
@@ -339,7 +340,7 @@ def _inline_directive_to_adf(
         return {
             "type": "text",
             "text": inner_text,
-            "marks": [{"type": "textColor", "attrs": {"color": attrs.get("", "")}}],
+            "marks": [{"type": "textColor", "attrs": {"color": attrs.get("color", "")}}],
         }
     # Generic inline directive
     return {
@@ -471,6 +472,46 @@ class _AdfRenderer(mistune.BaseRenderer):
             if start != 1:
                 node["attrs"] = {"order": start}
         return node
+
+    def _render_table(
+        self, token: dict[str, Any], children: Any, state: Any
+    ) -> dict[str, Any]:
+        rows: list[dict[str, Any]] = []
+        if not children:
+            return {"type": "table", "content": rows}
+
+        for section in children:
+            section_type = section.get("type", "")
+            if section_type == "table_head":
+                header_cells = self._render_table_cells(
+                    section.get("children", []), is_header=True, state=state
+                )
+                rows.append({"type": "tableRow", "content": header_cells})
+            elif section_type == "table_body":
+                for row in section.get("children", []):
+                    if row.get("type") == "table_row":
+                        body_cells = self._render_table_cells(
+                            row.get("children", []), is_header=False, state=state
+                        )
+                        rows.append({"type": "tableRow", "content": body_cells})
+
+        return {"type": "table", "content": rows}
+
+    def _render_table_cells(
+        self,
+        cells: list[dict[str, Any]],
+        is_header: bool,
+        state: Any,
+    ) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        cell_type = "tableHeader" if is_header else "tableCell"
+        for cell in cells:
+            if cell.get("type") != "table_cell":
+                continue
+            inline = self._render_children_inline(cell.get("children"), state)
+            para = {"type": "paragraph", "content": inline} if inline else {"type": "paragraph"}
+            result.append({"type": cell_type, "content": [para]})
+        return result
 
     def _render_children_inline(
         self, children: Any, state: Any

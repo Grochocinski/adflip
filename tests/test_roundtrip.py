@@ -158,3 +158,169 @@ class TestRoundTrip:
         assert panels[0]["attrs"]["panelType"] == "warning"
         blocks = _find_nodes(result, "codeBlock")
         assert len(blocks) >= 1
+
+    def test_text_color_roundtrip(self):
+        """textColor mark should preserve the color value through round-trip."""
+        original = _doc(_p(
+            _text("red text", marks=[{"type": "textColor", "attrs": {"color": "#ff0000"}}]),
+        ))
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        text_nodes = _find_nodes(result, "text")
+        colored = [
+            n for n in text_nodes
+            if any(m.get("type") == "textColor" for m in n.get("marks", []))
+        ]
+        assert len(colored) >= 1, f"No textColor nodes found in: {result}"
+        color_mark = next(
+            m for m in colored[0]["marks"] if m["type"] == "textColor"
+        )
+        assert color_mark["attrs"]["color"] == "#ff0000"
+
+    def test_unknown_node_roundtrip(self):
+        """Unknown ADF nodes preserved via confluence:adf should survive round-trip."""
+        original = _doc({
+            "type": "someFutureNode",
+            "attrs": {"key": "value"},
+            "content": [],
+        })
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        all_types = [n.get("type") for n in result.get("content", [])]
+        assert "someFutureNode" in all_types, (
+            f"Expected someFutureNode in top-level types, got: {all_types}"
+        )
+
+    def test_confluence_hosted_media_roundtrip(self):
+        """Confluence-hosted media (non-external) should survive round-trip."""
+        original = _doc({
+            "type": "mediaSingle",
+            "content": [{
+                "type": "media",
+                "attrs": {"id": "abc-123", "type": "file", "collection": "coll"},
+            }],
+        })
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        media_nodes = _find_nodes(result, "media")
+        assert len(media_nodes) >= 1, f"No media nodes found in: {result}"
+        assert media_nodes[0]["attrs"]["id"] == "abc-123"
+        assert media_nodes[0]["attrs"]["type"] == "file"
+
+    def test_table_roundtrip(self):
+        """Tables should preserve structure through round-trip."""
+        original = _doc({
+            "type": "table",
+            "content": [
+                {"type": "tableRow", "content": [
+                    {"type": "tableHeader", "content": [_p(_text("Name"))]},
+                    {"type": "tableHeader", "content": [_p(_text("Value"))]},
+                ]},
+                {"type": "tableRow", "content": [
+                    {"type": "tableCell", "content": [_p(_text("foo"))]},
+                    {"type": "tableCell", "content": [_p(_text("bar"))]},
+                ]},
+            ],
+        })
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        tables = _find_nodes(result, "table")
+        assert len(tables) >= 1, f"No table nodes found in: {result}"
+        assert "Name" in _find_text(tables[0])
+        assert "foo" in _find_text(tables[0])
+
+    def test_horizontal_rule_roundtrip(self):
+        """Horizontal rules should survive round-trip."""
+        original = _doc(
+            _p(_text("Before")),
+            {"type": "rule"},
+            _p(_text("After")),
+        )
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        rules = _find_nodes(result, "rule")
+        assert len(rules) >= 1
+        assert "Before" in _find_text(result)
+        assert "After" in _find_text(result)
+
+    def test_bullet_list_roundtrip(self):
+        """Bullet lists should survive round-trip."""
+        original = _doc({
+            "type": "bulletList",
+            "content": [
+                {"type": "listItem", "content": [_p(_text("Alpha"))]},
+                {"type": "listItem", "content": [_p(_text("Bravo"))]},
+            ],
+        })
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        lists = _find_nodes(result, "bulletList")
+        assert len(lists) >= 1
+        items = _find_nodes(lists[0], "listItem")
+        assert len(items) == 2
+
+    def test_ordered_list_roundtrip(self):
+        """Ordered lists should survive round-trip."""
+        original = _doc({
+            "type": "orderedList",
+            "content": [
+                {"type": "listItem", "content": [_p(_text("First"))]},
+                {"type": "listItem", "content": [_p(_text("Second"))]},
+            ],
+        })
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        lists = _find_nodes(result, "orderedList")
+        assert len(lists) >= 1
+        items = _find_nodes(lists[0], "listItem")
+        assert len(items) == 2
+
+    def test_blockquote_roundtrip(self):
+        """Blockquotes should survive round-trip."""
+        original = _doc({"type": "blockquote", "content": [_p(_text("Wise words"))]})
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        quotes = _find_nodes(result, "blockquote")
+        assert len(quotes) >= 1
+        assert "Wise words" in _find_text(quotes[0])
+
+    def test_extension_self_closing_roundtrip(self):
+        """Self-closing extensions should survive round-trip."""
+        original = _doc({
+            "type": "extension",
+            "attrs": {
+                "extensionType": "com.atlassian.confluence.macro.core",
+                "extensionKey": "status",
+            },
+        })
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        extensions = _find_nodes(result, "extension")
+        assert len(extensions) >= 1, f"No extension nodes found in: {result}"
+        assert extensions[0]["attrs"]["extensionType"] == "com.atlassian.confluence.macro.core"
+
+    def test_bodied_extension_roundtrip(self):
+        """Bodied extensions should survive round-trip."""
+        original = _doc({
+            "type": "bodiedExtension",
+            "attrs": {
+                "extensionType": "com.atlassian.macro",
+                "extensionKey": "code",
+            },
+            "content": [_p(_text("Macro body text"))],
+        })
+        md = adf_to_markdown(original)
+        result = markdown_to_adf(md)
+
+        bodied = _find_nodes(result, "bodiedExtension")
+        assert len(bodied) >= 1, f"No bodiedExtension nodes found in: {result}"
+        assert "Macro body text" in _find_text(bodied[0])
