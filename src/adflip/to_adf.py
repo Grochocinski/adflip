@@ -416,6 +416,12 @@ class _AdfRenderer(mistune.BaseRenderer):
         inline = self._render_children_inline(children, state)
         return {"type": "paragraph", "content": inline} if inline else {"type": "paragraph"}
 
+    def _render_block_text(
+        self, token: dict[str, Any], children: Any, state: Any
+    ) -> dict[str, Any]:
+        inline = self._render_children_inline(children, state)
+        return {"type": "paragraph", "content": inline} if inline else {"type": "paragraph"}
+
     def _render_heading(
         self, token: dict[str, Any], children: Any, state: Any
     ) -> dict[str, Any]:
